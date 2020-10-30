@@ -1,23 +1,111 @@
 // What are we changing in the menu
-#define MENU_EXIT        0 //not in the menu but couting mode
-#define MENU_MODE        1
-#define MENU_MINUTE10    2
-#define MENU_MINUTE1     3
-#define MENU_SECONDS10   4
-#define MENU_SECONDS1    5
-
-// What counting mode are we in
-#define MODE_UP     1
-#define MODE_DOWN   2
-#define MODE_EMOM   3
-#define MODE_INT    4
-#define MODE_CLOCK  5
 
 #define BUZZERSHORTBEEP   500
 #define BUZZERLONGBEEP    1000
 #define BUZZERFREQUENCY   5000
 #define ONESECOND         1000 
 
+
+class Button {
+  const byte pin;
+  int state;
+  unsigned long buttonDownMs;
+
+  protected:
+    virtual void shortClick() = 0;
+    virtual void longClick() = 0;
+
+  public:
+    Button(byte attachTo) :
+      pin(attachTo)
+    {
+    }
+
+		void setup() {
+      pinMode(pin, INPUT_PULLUP)
+      state = HIGH;
+    }
+
+		void loop() {
+			int prevState = state;
+			state = digitalRead(pin);
+			if (prevState == HIGH && state == LOW) {
+				buttonDownMs = millis();
+			}
+			else if (prevState == LOW && state == HIGH) {
+				if (millis() - buttonDownMs < 50) {
+				// ignore this for debounce
+				}
+				else if (millis() - buttonDownMs < 250) {
+					shortClick();
+				}
+				else  {
+					longClick();
+				}
+			}
+		}
+
+};
+
+// subclass of button, for each button
+class PowerStartControlButton: public Button {
+	public:
+		PowerStartControlButton(byte attachTo) :
+			Button(attachTo) 
+		{
+		}
+
+	protected:
+		void shortClick() {
+		}
+
+		void longClick() {
+		}
+};
+
+//class menuChangeButton: public Button {
+
+class MenuOption {
+	char* displayName; //2 green characters
+	int	startTimeInterval1Sec;
+	int startTimeInterval2Sec;
+	int nrOfRounds;
+	bool countDirectionUp;
+
+	public:
+		MenuOption(char* name, int time1, int time2, int rounds, bool countUp) :
+			displayname(name),
+			startTimeInterval1Sec(time1),
+			startTimeInterval2Sec(time2),
+			nrOfRounds(rounds),
+			countDirectionUp(countUp)
+		{
+		}
+	
+		void changeRounds(int change){
+			nrOfRounds += change;
+			//todo: Check for boundaries
+		}
+		void changeInterval1( int changeSec){
+			startTimeInterval1Sec += changeSec;
+			//todo: Check for boundaries
+		}
+		void changeInterval2( int changeSec){
+			startTimeInterval2Sec += changeSec;
+			//todo: Check for boundaries
+		}
+	
+};
+
+class TimerMenu {
+	bool timerRunning; //false = menu displayed
+	
+	//objects for each menuOption
+	
+	//pass menuOption data to timerClock
+	//pass display instance to timerclock
+
+};
 
  /* Global data
   *  - Menu Mode (1:modechange, 2:minute10, 3:minute1, 4:seconds10, 5:seconds1, 0 = exitmenu)
@@ -31,15 +119,6 @@
   *  - Time when timer started (millis)
   *  - Direction
   */
-
-int timerMode;
-int nrOfRounds;
-int downResetStartTime;
-int emomResetStartTime;
-int interval1ResetStartTime;
-int interval2ResetStartTime;
-unsigned long timerStarted;
-bool countDirectionUp;
 
 void setup() {
   // put your setup code here, to run once:
@@ -55,7 +134,7 @@ void setup() {
  */
 void displayTime(){
   // (millis() - timerStarted) / 1000 = time elapsed seconds
-  downResetStartTime
+  //downResetStartTime
 }
 
 void loop() {
