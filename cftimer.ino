@@ -155,15 +155,11 @@ class TimerClock {
       // Count down 10-0
       sprintf(displayText,"    %02d", 11-activeSecond);
       // Beep short short long on last 3 seconds
-      if (activeSecond == 11) {
-        preCountDownOn = false; //exit
-      }
     }
 
     void countDown() {
-      if (activeOption.getStartTime2() != 0){
-        //Intervals
-        int passedSec = activeSecond-11 - (((2*activeOption.getNrOfRounds() - activeRound)/2) * (activeOption.getStartTime1()+activeOption.getStartTime2()));
+      if (activeOption.getStartTime2() != 0){ //Intervals
+        int passedSec = activeSecond - (((2*activeOption.getNrOfRounds() - activeRound)/2) * (activeOption.getStartTime1()+activeOption.getStartTime2()));
         if (activeRound%2) { //Interval 1
           sprintf(displayText,"%02d%02d%02d", activeRound, (activeOption.getStartTime1()-passedSec/60), (activeOption.getStartTime1()-passedSec)%60);
         }
@@ -173,17 +169,17 @@ class TimerClock {
         }
       }
       else { // No Intervals
-        int passedSec = activeSecond-11 - ((activeOption.getNrOfRounds() - activeRound) * activeOption.getStartTime1());
+        int passedSec = activeSecond - ((activeOption.getNrOfRounds() - activeRound) * activeOption.getStartTime1());
         sprintf(displayText,"%02d%02d%02d", activeRound, (activeOption.getStartTime1()-passedSec/60), (activeOption.getStartTime1()-passedSec)%60);
       }
     }
 
     void countUp() {
-      if ((activeSecond-11)/60 < 60) { //first hour, show "UP"
-        sprintf(displayText,"UP%02d%02d", (activeSecond-11)/60, (activeSecond-11)%60);
+      if ((activeSecond)/60 < 60) { //first hour, show "UP"
+        sprintf(displayText,"UP%02d%02d", (activeSecond)/60, (activeSecond)%60);
       }
       else { //passed the hour
-        sprintf(displayText,"%02d%02d%02d", (activeSecond-11)/3600, ((activeSecond-11)/60)%60, (activeSecond-11)%60);
+        sprintf(displayText,"%02d%02d%02d", (activeSecond)/3600, ((activeSecond)/60)%60, (activeSecond)%60);
       } 
     }
 
@@ -195,7 +191,9 @@ class TimerClock {
 
     void startClock() {
       // public to skip precountdown
-      
+      startTimeMs = millis();
+      preCountDownOn = false;
+      activeSecond = 0;
     }
 
     void setup() {
@@ -211,25 +209,24 @@ class TimerClock {
     }
 
     void loop() {
-      // Execute code
-      
       if ( (millis() - startTimeMs) >= activeSecond*1000 ) {
-        // one seconds has passed since the last second
         if (preCountDownOn){
           preCountDown();
+          if (activeSecond - 11 == 0) {
+            startClock();
+          }
         }
         else {
-          // Timer running
           if (activeOption.getCountDirectionUp()) {
             countUp();
           }
-          else { //Counting Down
+          else {
             countDown();
           }  
         }
         //displayText on display
+        activeSecond++;
       }
-      activeSecond++;
     }
 };
 
@@ -238,7 +235,14 @@ class TimerClock {
  */
 class TimerMenu {
 	bool timerRunning; //false = menu displayed
-  
+  MenuOption menuUp;
+  MenuOption menuDown;
+  MenuOption menuInterval;
+
+  public:
+
+  void setup() {
+  }
 	
 	//objects for each menuOption
 	
