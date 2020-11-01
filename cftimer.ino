@@ -22,7 +22,7 @@ class Button {
     }
 
 		void setup() {
-      pinMode(pin, INPUT_PULLUP)
+      pinMode(pin, INPUT_PULLUP);
       state = HIGH;
     }
 
@@ -47,6 +47,12 @@ class Button {
 
 };
 
+/*Buttons:
+ * Power / Start Button: Press to start, Hold to Wake from Deep sleep
+ * Menu button: press to change mode
+ * + button: plus time / menu
+ * - button: minus time / menu
+ */
 // subclass of button, for each button
 class PowerStartControlButton: public Button {
 	public:
@@ -63,6 +69,8 @@ class PowerStartControlButton: public Button {
 		}
 };
 
+
+
 //class menuChangeButton: public Button {
 
 class MenuOption {
@@ -74,13 +82,29 @@ class MenuOption {
 
 	public:
 		MenuOption(char* name, int time1, int time2, int rounds, bool countUp) :
-			displayname(name),
+			displayName(name),
 			startTimeInterval1Sec(time1),
 			startTimeInterval2Sec(time2),
 			nrOfRounds(rounds),
 			countDirectionUp(countUp)
 		{
 		}
+
+    char* getDisplayName(){
+      return displayName;
+    }
+    int getStartTime1(){
+      return startTimeInterval1Sec;
+    }
+    int getStartTime2(){
+      return startTimeInterval2Sec;
+    }
+    int getNrOfRounds(){
+      return nrOfRounds;
+    }
+    bool getCountDirectionUp(){
+      return countDirectionUp;
+    }
 	
 		void changeRounds(int change){
 			nrOfRounds += change;
@@ -97,8 +121,124 @@ class MenuOption {
 	
 };
 
+
+/*
+ * Handles active clock countdown/up
+ */
+class TimerClock {
+  MenuOption &activeOption;
+  unsigned long startTimeMs;
+  bool preCountDownOn;
+  int activeSecond;
+  int activeRound;
+  static char displayText[6];
+  
+//Todo: Add reference to display
+
+  private:
+
+    void beepAtTheEnd() {
+      if (activeSecond == 0) {
+            //longBeep on 0
+      }
+      else {
+        if (preCountDownOn){
+        // Beep short short long on last 3 seconds 
+          if (activeSecond < 4) {
+            // shortBeep
+          }
+        }
+      }
+    }
+
+    void preCountDown() {
+      // Count down 10-0
+      sprintf(displayText,"    %02d", 11-activeSecond);
+      // Beep short short long on last 3 seconds
+      if (activeSecond == 11) {
+        preCountDownOn = false; //exit
+      }
+    }
+
+    void countDown() {
+      if (activeOption.getStartTime2() != 0){
+        //Intervals
+        int passedSec = activeSecond-11 - (((2*activeOption.getNrOfRounds() - activeRound)/2) * (activeOption.getStartTime1()+activeOption.getStartTime2()));
+        if (activeRound%2) { //Interval 1
+          sprintf(displayText,"%02d%02d%02d", activeRound, (activeOption.getStartTime1()-passedSec/60), (activeOption.getStartTime1()-passedSec)%60);
+        }
+        else { //Interval 2
+          passedSec += activeOption.getStartTime1(); //add time of timer1, because this has additionally passed
+          sprintf(displayText,"%02d%02d%02d", activeRound, (activeOption.getStartTime2()-passedSec/60), (activeOption.getStartTime2()-passedSec)%60);
+        }
+      }
+      else { // No Intervals
+        int passedSec = activeSecond-11 - ((activeOption.getNrOfRounds() - activeRound) * activeOption.getStartTime1());
+        sprintf(displayText,"%02d%02d%02d", activeRound, (activeOption.getStartTime1()-passedSec/60), (activeOption.getStartTime1()-passedSec)%60);
+      }
+    }
+
+    void countUp() {
+      if ((activeSecond-11)/60 < 60) { //first hour, show "UP"
+        sprintf(displayText,"UP%02d%02d", (activeSecond-11)/60, (activeSecond-11)%60);
+      }
+      else { //passed the hour
+        sprintf(displayText,"%02d%02d%02d", (activeSecond-11)/3600, ((activeSecond-11)/60)%60, (activeSecond-11)%60);
+      } 
+    }
+
+  public:
+    TimerClock(MenuOption &optionToActivate) :
+      activeOption(optionToActivate) 
+    {
+    }
+
+    void startClock() {
+      // public to skip precountdown
+      
+    }
+
+    void setup() {
+      startTimeMs = millis();
+      preCountDownOn = true;
+      activeSecond = 1;
+      if (activeOption.getStartTime2() != 0){
+        activeRound = 2*activeOption.getNrOfRounds(); //Show intervals
+      }
+      else {
+        activeRound = activeOption.getNrOfRounds();
+      }
+    }
+
+    void loop() {
+      // Execute code
+      
+      if ( (millis() - startTimeMs) >= activeSecond*1000 ) {
+        // one seconds has passed since the last second
+        if (preCountDownOn){
+          preCountDown();
+        }
+        else {
+          // Timer running
+          if (activeOption.getCountDirectionUp()) {
+            countUp();
+          }
+          else { //Counting Down
+            countDown();
+          }  
+        }
+        //displayText on display
+      }
+      activeSecond++;
+    }
+};
+
+/*
+ * Menu implementation
+ */
 class TimerMenu {
 	bool timerRunning; //false = menu displayed
+  
 	
 	//objects for each menuOption
 	
@@ -142,12 +282,7 @@ void loop() {
 
 }
 
-/*Buttons:
- * Power / Start Button: Press to start, Hold to Wake from Deep sleep
- * Menu button: press to change mode
- * + button: plus time / menu
- * - button: minus time / menu
- */
+
 
 /* Display:
  *  6 digits:
@@ -175,3 +310,5 @@ void loop() {
    */
 
   /* Start sequence, 10 seconds and beep when starting
+   *  
+   */
