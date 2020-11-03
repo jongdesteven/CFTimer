@@ -74,23 +74,25 @@ class PowerStartControlButton: public Button {
 //class menuChangeButton: public Button {
 
 class MenuOption {
-	char* displayName; //2 green characters
+	const char* displayName; //2 green characters
 	int	startTimeInterval1Sec;
 	int startTimeInterval2Sec;
 	int nrOfRounds;
 	bool countDirectionUp;
+  bool includesInterval;
 
 	public:
-		MenuOption(char* name, int time1, int time2, int rounds, bool countUp) :
+		MenuOption(const char* name, int time1, int time2, int rounds, bool countUp, bool interval) :
 			displayName(name),
 			startTimeInterval1Sec(time1),
 			startTimeInterval2Sec(time2),
 			nrOfRounds(rounds),
-			countDirectionUp(countUp)
+			countDirectionUp(countUp),
+      includesInterval(interval)
 		{
 		}
 
-    char* getDisplayName(){
+    const char* getDisplayName(){
       return displayName;
     }
     int getStartTime1(){
@@ -105,20 +107,26 @@ class MenuOption {
     bool getCountDirectionUp(){
       return countDirectionUp;
     }
+    bool isInterval(){
+      return includesInterval;
+    }
 	
 		void changeRounds(int change){
 			nrOfRounds += change;
 			//todo: Check for boundaries
 		}
-		void changeInterval1( int changeSec){
+		void changeInterval(int interval, int changeSec){
+      switch (interval){
+        case 1:
+          startTimeInterval1Sec += changeSec;
+          break;
+        case 2:
+          startTimeInterval2Sec += changeSec;
+          break; 
+      }
 			startTimeInterval1Sec += changeSec;
 			//todo: Check for boundaries
 		}
-		void changeInterval2( int changeSec){
-			startTimeInterval2Sec += changeSec;
-			//todo: Check for boundaries
-		}
-	
 };
 
 
@@ -135,8 +143,8 @@ class TimerClock {
   
 //Todo: Add reference to display
 
+    
   private:
-
     void beepAtTheEnd() {
       if (activeSecond == 0) {
             //longBeep on 0
@@ -158,7 +166,7 @@ class TimerClock {
     }
 
     void countDown() {
-      if (activeOption.getStartTime2() != 0){ //Intervals
+      if (activeOption.isInterval()){ //Intervals
         int passedSec = activeSecond - (((2*activeOption.getNrOfRounds() - activeRound)/2) * (activeOption.getStartTime1()+activeOption.getStartTime2()));
         if (activeRound%2) { //Interval 1
           sprintf(displayText,"%02d%02d%02d", activeRound, (activeOption.getStartTime1()-passedSec/60), (activeOption.getStartTime1()-passedSec)%60);
@@ -175,17 +183,18 @@ class TimerClock {
     }
 
     void countUp() {
+      //Todo: intervals support
       if ((activeSecond)/60 < 60) { //first hour, show "UP"
-        sprintf(displayText,"UP%02d%02d", (activeSecond)/60, (activeSecond)%60);
+        sprintf(displayText,"%2s%02d%02d", activeOption.getDisplayName(), (activeSecond)/60, (activeSecond)%60);
       }
       else { //passed the hour
         sprintf(displayText,"%02d%02d%02d", (activeSecond)/3600, ((activeSecond)/60)%60, (activeSecond)%60);
       } 
     }
-
+    
   public:
     TimerClock(MenuOption &optionToActivate) :
-      activeOption(optionToActivate) 
+      activeOption(optionToActivate)
     {
     }
 
@@ -196,11 +205,12 @@ class TimerClock {
       activeSecond = 0;
     }
 
-    void setup() {
+    void setup(MenuOption &optionToAttach) {
+      activeOption = optionToAttach;
       startTimeMs = millis();
       preCountDownOn = true;
       activeSecond = 1;
-      if (activeOption.getStartTime2() != 0){
+      if (activeOption.isInterval()){
         activeRound = 2*activeOption.getNrOfRounds(); //Show intervals
       }
       else {
@@ -228,6 +238,7 @@ class TimerClock {
         activeSecond++;
       }
     }
+  
 };
 
 /*
@@ -235,50 +246,84 @@ class TimerClock {
  */
 class TimerMenu {
 	bool timerRunning; //false = menu displayed
-  MenuOption menuUp;
-  MenuOption menuDown;
-  MenuOption menuInterval;
-
+  int activeMenu;
+  int changeDigit;
+  int changeInterval;
+  TimerClock activeTimer;
+  //const char* name, int time1, int time2, int rounds, bool countUp, bool isInterval
+  MenuOption menuOptions[3] = {MenuOption("UP", 0, 0, 0, true, false), 
+                              MenuOption("dn", 10*60, 0, 0, false, false), 
+                              MenuOption("nt", 60, 30, 5, false, true)};
+  //pass display instance to timerclock
+  
   public:
+    void setup() {
+      activeMenu = 0;
+      changeDigit = 0; //|UP 01:23|
+    }
+  
+    void loop() {
+      
+    }
+  
+    void startTheTimer(){
+      activeTimer.setup(menuOptions[activeMenu]);
+    }
+  
+    void changeTimerMode() {
+      //cycle between MenuOptions
+      activeMenu = (activeMenu+1)%sizeof(menuOptions);
+      changeDigit = 0;
+    }
 
-  void setup() {
-  }
-	
-	//objects for each menuOption
-	
-	//pass menuOption data to timerClock
-	//pass display instance to timerclock
+    void changeChangeMode() {
+      //cycle between minutes, seconds
+      if(menuOptions[activeMenu].isInterval() && changeDigit == 3){
+        changeInterval = (changeInterval+1)%2;
+      }
+      changeDigit = (changeDigit+1)%4;
+    }
+  
+    void incrementOption() {
+      switch(changeDigit){
+        case 0: //minute tens
+          menuOptions[activeMenu].changeInterval(changeInterval, 10*10*60);
+          break;
+        case 1:
+          menuOptions[activeMenu].changeInterval(changeInterval, 10*60);
+          break;
+        case 2:
+          menuOptions[activeMenu].changeInterval(changeInterval, 60);
+          break;
+        case 3:
+          menuOptions[activeMenu].changeInterval(changeInterval, 1);
+          break;       
+      }
+    }
+  
+    void decrementOption() {
+      switch(changeDigit){
+        case 0: //minute tens
+          menuOptions[activeMenu].changeInterval(changeInterval, -10*10*60);
+          break;
+        case 1:
+          menuOptions[activeMenu].changeInterval(changeInterval, -10*60);
+          break;
+        case 2:
+          menuOptions[activeMenu].changeInterval(changeInterval, -60);
+          break;
+        case 3:
+          menuOptions[activeMenu].changeInterval(changeInterval, -1);
+          break;       
+      }
+    }
+  	
 
 };
-
- /* Global data
-  *  - Menu Mode (1:modechange, 2:minute10, 3:minute1, 4:seconds10, 5:seconds1, 0 = exitmenu)
-  *  - Real Time Clock (todo)
-  *  - Clock modus (up, dn, int, emom)
-  *  - # of Rounds
-  *  - Down Reset Start Time
-  *  - EMOM Reset Start Time
-  *  - Interval 1 Reset Start Time (60s)
-  *  - Interval 2 Reset Start Time (60s)
-  *  - Time when timer started (millis)
-  *  - Direction
-  */
 
 void setup() {
   // put your setup code here, to run once:
 
-}
-
-/* Display time:
- *  Calculate from start time and reset time, rounds etc.
- *  example: 5rounds of 1:30 minute:
- *  5 * 90 seconds / 90 = rounds
- *  5 * 90 seconds modulo 60 = seconds
- *  etc
- */
-void displayTime(){
-  // (millis() - timerStarted) / 1000 = time elapsed seconds
-  //downResetStartTime
 }
 
 void loop() {
@@ -295,24 +340,3 @@ void loop() {
  *  |10 00:59| EMOM
  *  |24 00:30| INT
  */
-
-
-
-
-   /* Display Menu
-    *  blink digits?
-    *  + / - menu
-    *  + / - Minutes
-    *  + / - Seconds
-    *  + / - menu etc.
-    */
-
-  /* Buzzer
-   *  beep, beep, Beeeeep on start with 10seconds countdown
-   *  Beeeep on finish
-   *  Beep on interval / EMOM rounds (every time round = 0)
-   */
-
-  /* Start sequence, 10 seconds and beep when starting
-   *  
-   */
