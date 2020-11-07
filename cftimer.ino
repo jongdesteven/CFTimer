@@ -63,9 +63,11 @@ class PowerStartControlButton: public Button {
 
 	protected:
 		void shortClick() {
+    // Start Timer
 		}
 
 		void longClick() {
+      // Wake from sleep
 		}
 };
 
@@ -78,9 +80,11 @@ class MenuControlButton: public Button {
 
   protected:
     void shortClick() {
+      //Next changeInterval
     }
 
     void longClick() {
+      // Change menuOption
     }
 };
 
@@ -122,7 +126,7 @@ class MenuOption {
 	int startTimeInterval2Sec;
 	int nrOfRounds;
 	bool countDirectionUp;
-  bool includesRounds;
+  bool includesInterval;
 
 	public:
 		MenuOption(const char* name, int time1, int time2, int rounds, bool countUp, bool interval) :
@@ -131,7 +135,7 @@ class MenuOption {
 			startTimeInterval2Sec(time2),
 			nrOfRounds(rounds),
 			countDirectionUp(countUp),
-      includesRounds(interval)
+      includesInterval(interval)
 		{
 		}
 
@@ -152,7 +156,7 @@ class MenuOption {
         return nrOfRounds*2;
       }
       else {
-        return nrOfRounds;
+        return nrOfRounds ? nrOfRounds : 1;
       }
     }
     
@@ -160,14 +164,20 @@ class MenuOption {
       return countDirectionUp;
     }
     bool hasRounds(){
-      return includesRounds;
+      return nrOfRounds ? true: false;
+    }
+    bool hasInterval(){
+      return includesInterval;
     }
 	
 		void changeRounds(int change){
-			nrOfRounds += change;
-			//todo: Check for boundaries
+      // do not add rounds if it never had
+		  if (nrOfRounds > 0 && nrOfRounds <= 99) {
+        nrOfRounds += change;
+		  }
 		}
-		void changeInterval(int interval, int changeSec){
+   
+		void changeTimeInterval(int interval, int changeSec){
       switch (interval){
         case 1:
           startTimeInterval1Sec += changeSec;
@@ -190,9 +200,9 @@ class TimerClock {
   unsigned long startTimeMs;
   bool preCountDownOn;
   enum State {
+    STOPPED = 0,
     PRECOUNTDOWN = 1,
-    RUNNING = 2, 
-    STOPPED = 3
+    RUNNING = 2
   }state;
   int activeSecond;
   static char displayText[6];
@@ -267,14 +277,23 @@ class TimerClock {
           case PRECOUNTDOWN:
             state = RUNNING;
             activeSecond = 1;
+            startTimeMs = millis();
             break;
           case RUNNING:
-            activeSecond = 0;
+            //activeSecond = 0;
+            state = STOPPED;
             break;
           case STOPPED:
             state = PRECOUNTDOWN;
+            activeSecond = 1;
+            startTimeMs = millis();
+            break;
       }
       startTimeMs = millis();
+    }
+
+    bool timerRunning(){
+      return state ? true : false;
     }
 
     void setup(MenuOption &optionToAttach) {
@@ -329,9 +348,11 @@ class TimerMenu {
   int activeMenu;
   static char displayText[6];
   enum ChangeInterval {
+    MENUSTART = 0,
     INTERVAL1 = 1,
     INTERVAL2 = 2,
-    NR_OF_ROUNDS = 3
+    NR_OF_ROUNDS = 3,
+    TIMER_RUNNING = 4
   }changeInterval;
   enum ChangeDigit {
     MINUTE_TENS = 1,
@@ -343,7 +364,8 @@ class TimerMenu {
   }changeDigit;
   
   //const char* name, int time1, int time2, int rounds, bool countUp, bool isInterval
-  MenuOption menuOptions[3] = {MenuOption("UP", 0, 0, 0, true, false), 
+  MenuOption menuOptions[4] = {MenuOption("UP", 0, 0, 0, true, false),
+                              MenuOption("UP", 45, 0, 2, true, false),  
                               MenuOption("dn", 10*60, 0, 0, false, false), 
                               MenuOption("nt", 60, 30, 5, false, true)};
   TimerClock activeTimer = TimerClock(menuOptions[0]);
@@ -355,15 +377,22 @@ class TimerMenu {
       //ToDo: Blinking changeDigit
       int intervalTime;
       switch (changeInterval){
+      case MENUSTART:
+        if ( menuOptions[activeMenu].hasRounds() ) {
+          sprintf(displayText,"%2s  rd", menuOptions[activeMenu].getDisplayName());
+        } else {
+          sprintf(displayText,"%2s    ", menuOptions[activeMenu].getDisplayName());
+        }
+        break;
       case INTERVAL1:
         intervalTime = menuOptions[activeMenu].getStartTime1();
-        sprintf(displayText,"%2s%02d%02d", menuOptions[activeMenu].getDisplayName(), menuOptions[activeMenu].getStartTime1()/60, menuOptions[activeMenu].getStartTime1()%60);
+        sprintf(displayText,"1 %02d%02d", menuOptions[activeMenu].getStartTime1()/60, menuOptions[activeMenu].getStartTime1()%60);
         break;
       case INTERVAL2:
-        sprintf(displayText,"%2s%02d%02d", menuOptions[activeMenu].getDisplayName(), menuOptions[activeMenu].getStartTime2()/60, menuOptions[activeMenu].getStartTime2()%60);
+        sprintf(displayText,"2 %02d%02d", menuOptions[activeMenu].getStartTime2()/60, menuOptions[activeMenu].getStartTime2()%60);
         break;
       case NR_OF_ROUNDS:
-        sprintf(displayText,"%02d    ", menuOptions[activeMenu].getNrOfRounds());
+        sprintf(displayText,"rd  %02d", menuOptions[activeMenu].getNrOfRounds());
         break;
       }
     }
@@ -384,14 +413,34 @@ class TimerMenu {
         displayMenu();
       }
     }
-  
+
+    // To be called by Power/Start Button short press
     void startTheTimer(){
-      
-      activeTimer.setup(menuOptions[activeMenu]);
-      activeTimer.startClock();
+
+      switch (changeInterval) {
+      case MENUSTART:
+        activeTimer.setup(menuOptions[activeMenu]);
+        activeTimer.startClock();
+        changeInterval = TIMER_RUNNING;
+        break;
+      case INTERVAL1:
+      case INTERVAL2:
+      case NR_OF_ROUNDS:
+        changeInterval = MENUSTART;
+        break;
+      case TIMER_RUNNING:
+        if (activeTimer.timerRunning()) {
+          activeTimer.startClock();
+        }
+        else {
+          changeInterval = MENUSTART;
+        }
+        break;
+      }
       
     }
-  
+
+    // To be called by Menu Button short press
     void changeTimerMode() {
       //cycle between MenuOptions
       activeMenu = (activeMenu+1)%sizeof(menuOptions);
@@ -401,19 +450,26 @@ class TimerMenu {
 
     // Switch between intervals or rounds
     void changeChangeMode() {
-      //cycle between minutes, seconds
-
-      if (changeDigit == SECONDS | changeDigit == ROUNDS) {
+      
+      // If at end of setting, switch to next Interval or Rounds, if applicable
+      if (changeDigit == SECONDS || changeDigit == ROUNDS) {
         switch (changeInterval){
         case INTERVAL1:
-          if (menuOptions[activeMenu].hasRounds()){
+          if (menuOptions[activeMenu].hasInterval()){
             changeInterval = INTERVAL2;
+            changeDigit = MINUTE_TENS;
+            break;
+          } 
+          else if ( menuOptions[activeMenu].hasRounds()) {
+            changeInterval = NR_OF_ROUNDS;
+            changeDigit = ROUNDS_TENS;
+            break;
           }
-          changeDigit = MINUTE_TENS;
+          changeDigit = MINUTE_TENS; //stay at Interval1
           break;
         case INTERVAL2:
           changeInterval = NR_OF_ROUNDS;
-          changeDigit = ROUNDS_TENS; //treat rounds as seconds
+          changeDigit = ROUNDS_TENS;
           break;
         case NR_OF_ROUNDS:
           changeInterval = INTERVAL1;
@@ -422,6 +478,7 @@ class TimerMenu {
         }
       }
       else {
+        // Move to next digit to change
         switch (changeDigit) {
         case MINUTE_TENS:
           changeDigit = MINUTES;
@@ -442,23 +499,35 @@ class TimerMenu {
           changeDigit = MINUTE_TENS;
         } 
       }
+
+      // Move to change menu, from menuStart
+      switch (changeInterval) {
+      case MENUSTART:
+        changeInterval = INTERVAL1;
+        changeDigit = MINUTE_TENS;
+        break;
+      case INTERVAL1:
+      case INTERVAL2:
+      case NR_OF_ROUNDS:
+        break;
+      }
       
     }
 
-    // increment ChangeDigit
+    // To be called by button +
     void incrementOption() {
       switch(changeDigit){
       case MINUTE_TENS: //minute tens
-        menuOptions[activeMenu].changeInterval(changeInterval, 10*10*60);
+        menuOptions[activeMenu].changeTimeInterval(changeInterval, 10*10*60);
         break;
       case MINUTES:
-        menuOptions[activeMenu].changeInterval(changeInterval, 10*60);
+        menuOptions[activeMenu].changeTimeInterval(changeInterval, 10*60);
         break;
       case SECOND_TENS:
-        menuOptions[activeMenu].changeInterval(changeInterval, 60);
+        menuOptions[activeMenu].changeTimeInterval(changeInterval, 60);
         break;
       case SECONDS:
-        menuOptions[activeMenu].changeInterval(changeInterval, 1);
+        menuOptions[activeMenu].changeTimeInterval(changeInterval, 1);
         break;
       case ROUNDS_TENS:
         menuOptions[activeMenu].changeRounds(10);
@@ -468,20 +537,32 @@ class TimerMenu {
         break;             
       }
     }
-  
+
+    // To be called by button -
     void decrementOption() {
+      switch (changeInterval) {
+      case MENUSTART:
+        changeInterval = INTERVAL1;
+        changeDigit = MINUTE_TENS;
+        break;
+      case INTERVAL1:
+      case INTERVAL2:
+      case NR_OF_ROUNDS:
+        break;
+      }
+      
       switch(changeDigit){
       case MINUTE_TENS: //minute tens
-        menuOptions[activeMenu].changeInterval(changeInterval, -10*10*60);
+        menuOptions[activeMenu].changeTimeInterval(changeInterval, -10*10*60);
         break;
       case MINUTES:
-        menuOptions[activeMenu].changeInterval(changeInterval, -10*60);
+        menuOptions[activeMenu].changeTimeInterval(changeInterval, -10*60);
         break;
       case SECOND_TENS:
-        menuOptions[activeMenu].changeInterval(changeInterval, -60);
+        menuOptions[activeMenu].changeTimeInterval(changeInterval, -60);
         break;
       case SECONDS:
-        menuOptions[activeMenu].changeInterval(changeInterval, -1);
+        menuOptions[activeMenu].changeTimeInterval(changeInterval, -1);
         break;
       case ROUNDS_TENS:
         menuOptions[activeMenu].changeRounds(-10);
