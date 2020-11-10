@@ -1,3 +1,5 @@
+#include <LedControl.h>
+
 // What are we changing in the menu
 
 #define BUZZERSHORTBEEP   500
@@ -5,139 +7,65 @@
 #define BUZZERFREQUENCY   5000
 #define ONESECOND         1000 
 
-
-class Button {
-  const byte pin;
-  int state;
-  unsigned long buttonDownMs;
-
-  protected:
-    virtual void shortClick() = 0;
-    virtual void longClick() = 0;
-
+class DisplayControl: public LedControl {
+  const byte colonPin;
+  char oldText[6];
+  
   public:
-    Button(byte attachTo) :
-      pin(attachTo)
-    {
+    DisplayControl(int dataIn, int clk, int load, byte colon) :
+      LedControl(dataIn, clk, load, 1),
+      colonPin(colon)
+      {
+      }
+
+    void setup(){
+      pinMode(colonPin, OUTPUT);
+      digitalWrite(colonPin, LOW);
+      sprintf(oldText, "------");
+      
+      setScanLimit(0, 6);
+      shutdown(0, false);
+      setIntensity(0, 8); //0-15
+      clearDisplay(0);
     }
 
-		void setup() {
-      pinMode(pin, INPUT_PULLUP);
-      state = HIGH;
+    void turnColonOn(bool isOn){
+      (isOn) ? digitalWrite(colonPin, HIGH) : digitalWrite(colonPin, LOW);
     }
 
-		void loop() {
-			int prevState = state;
-			state = digitalRead(pin);
-			if (prevState == HIGH && state == LOW) {
-				buttonDownMs = millis();
-			}
-			else if (prevState == LOW && state == HIGH) {
-				if (millis() - buttonDownMs < 50) {
-				// ignore this for debounce
-				}
-				else if (millis() - buttonDownMs < 250) {
-					shortClick();
-				}
-				else  {
-					longClick();
-				}
-			}
-		}
+    void loop(){
+      
+    }
+
+    void displayCharArray(char *text){
+      if (strcmp(oldText, text) != 0){
+        for( int i=0; i<6; i++){
+          setChar(0, i, text[i], false);
+        }
+        strcpy(oldText, text);
+      }
+    }
 
 };
-
-/*Buttons:
- * Power / Start Button: Press to start, Hold to Wake from Deep sleep
- * Menu button: press to change mode
- * + button: plus time / menu
- * - button: minus time / menu
- */
-// subclass of button, for each button
-class PowerStartControlButton: public Button {
-	public:
-		PowerStartControlButton(byte attachTo) :
-			Button(attachTo) 
-		{
-		}
-
-	protected:
-		void shortClick() {
-    // Start Timer
-		}
-
-		void longClick() {
-      // Wake from sleep
-		}
-};
-
-class MenuControlButton: public Button {
-  public:
-    MenuControlButton(byte attachTo) :
-      Button(attachTo) 
-    {
-    }
-
-  protected:
-    void shortClick() {
-      //Next changeInterval
-    }
-
-    void longClick() {
-      // Change menuOption
-    }
-};
-
-class MinusButton: public Button {
-  public:
-    MinusButton(byte attachTo) :
-      Button(attachTo) 
-    {
-    }
-
-  protected:
-    void shortClick() {
-    }
-
-    void longClick() {
-    }
-};
-
-class PlusButton: public Button {
-  public:
-    PlusButton(byte attachTo) :
-      Button(attachTo) 
-    {
-    }
-
-  protected:
-    void shortClick() {
-    }
-
-    void longClick() {
-    }
-};
-
-//class menuChangeButton: public Button {
 
 class MenuOption {
-	const char* displayName; //2 green characters
-	int	startTimeInterval1Sec;
-	int startTimeInterval2Sec;
-	int nrOfRounds;
-	bool countDirectionUp;
+  const char* displayName; //2 green characters
+  int startTimeInterval1Sec;
+  int startTimeInterval2Sec;
+  int nrOfRounds;
+  bool countDirectionUp;
   bool includesInterval;
 
-	public:
-		MenuOption(const char* name, int time1, int time2, int rounds, bool countUp, bool interval) :
-			displayName(name),
-			startTimeInterval1Sec(time1),
-			startTimeInterval2Sec(time2),
-			nrOfRounds(rounds),
-			countDirectionUp(countUp),
+  public:
+    MenuOption(const char* name, int time1, int time2, int rounds, bool countUp, bool interval) :
+      displayName(name),
+      startTimeInterval1Sec(time1),
+      startTimeInterval2Sec(time2),
+      nrOfRounds(rounds),
+      countDirectionUp(countUp),
       includesInterval(interval)
-		{
-		}
+    {
+    }
 
     const char* getDisplayName(){
       return displayName;
@@ -169,15 +97,15 @@ class MenuOption {
     bool hasInterval(){
       return includesInterval;
     }
-	
-		void changeRounds(int change){
+  
+    void changeRounds(int change){
       // do not add rounds if it never had
-		  if (nrOfRounds > 0 && nrOfRounds <= 99) {
+      if (nrOfRounds > 0 && nrOfRounds <= 99) {
         nrOfRounds += change;
-		  }
-		}
+      }
+    }
    
-		void changeTimeInterval(int interval, int changeSec){
+    void changeTimeInterval(int interval, int changeSec){
       switch (interval){
         case 1:
           startTimeInterval1Sec += changeSec;
@@ -186,17 +114,15 @@ class MenuOption {
           startTimeInterval2Sec += changeSec;
           break; 
       }
-			startTimeInterval1Sec += changeSec;
-			//todo: Check for boundaries
-		}
+      startTimeInterval1Sec += changeSec;
+      //todo: Check for boundaries
+    }
 };
 
-
-/*
- * Handles active clock countdown/up
- */
 class TimerClock {
   MenuOption &activeOption;
+  DisplayControl &displayLed;
+  char displayText[6];
   unsigned long startTimeMs;
   bool preCountDownOn;
   enum State {
@@ -205,11 +131,8 @@ class TimerClock {
     RUNNING = 2
   }state;
   int activeSecond;
-  static char displayText[6];
   
 //Todo: Add reference to display
-
-    
   private:
     void beepAtTheEnd() {
       if (secondsLeftThisInterval() == 0) {
@@ -226,6 +149,7 @@ class TimerClock {
       // Count down 10-0
       sprintf(displayText,"    %02d", 11-activeSecond);
       // Beep short short long on last 3 seconds
+      displayLed.displayCharArray(displayText);
       beepAtTheEnd();
     }
 
@@ -240,13 +164,14 @@ class TimerClock {
       }
       else { //passed the hour
         sprintf(displayText,"%02d%02d%02d", (activeSecond)/3600, ((activeSecond)/60)%60, (activeSecond)%60);
-      } 
+      }
     }
     
   public:
 
-    TimerClock(MenuOption &optionToActivate) :
-      activeOption(optionToActivate)
+    TimerClock(MenuOption &optionToActivate, DisplayControl &displayLedToAttach) :
+      activeOption(optionToActivate),
+      displayLed(displayLedToAttach)
     {
     }
 
@@ -278,18 +203,20 @@ class TimerClock {
             state = RUNNING;
             activeSecond = 1;
             startTimeMs = millis();
+            displayLed.turnColonOn(true);
             break;
           case RUNNING:
             //activeSecond = 0;
             state = STOPPED;
+            displayLed.turnColonOn(true);
             break;
           case STOPPED:
             state = PRECOUNTDOWN;
             activeSecond = 1;
             startTimeMs = millis();
+            displayLed.turnColonOn(false);
             break;
       }
-      startTimeMs = millis();
     }
 
     bool timerRunning(){
@@ -329,7 +256,7 @@ class TimerClock {
         case STOPPED:
           // Display Reset mode
           if( activeOption.getCountDirectionUp() ) {
-            printf(displayText,"%2s%02d%02d", activeOption.getDisplayName(), (activeSecond)/60, (activeSecond)%60);
+            sprintf(displayText,"%2s%02d%02d", activeOption.getDisplayName(), (activeSecond)/60, (activeSecond)%60);
           }
           else {
             sprintf(displayText,"%02d%02d%02d", roundsLeft(), secondsLeftThisInterval()/60, secondsLeftThisInterval()%60);
@@ -337,16 +264,15 @@ class TimerClock {
           break; 
       }
       //displayText on display
+      displayLed.displayCharArray(displayText);
       beepAtTheEnd(); 
     }
 };
 
-/*
- * Menu implementation
- */
 class TimerMenu {
+  DisplayControl &displayLed;
+  char displayText[6];
   int activeMenu;
-  static char displayText[6];
   enum ChangeInterval {
     MENUSTART = 0,
     INTERVAL1 = 1,
@@ -368,7 +294,7 @@ class TimerMenu {
                               MenuOption("UP", 45, 0, 2, true, false),  
                               MenuOption("dn", 10*60, 0, 0, false, false), 
                               MenuOption("nt", 60, 30, 5, false, true)};
-  TimerClock activeTimer = TimerClock(menuOptions[0]);
+  TimerClock activeTimer = TimerClock(menuOptions[0], displayLed);
   //pass display instance to timerclock
 
   private:
@@ -396,12 +322,73 @@ class TimerMenu {
         break;
       }
     }
+
+    // To be called by Menu Button short press
+    void changeTimerMode() {
+      //cycle between MenuOptions
+      activeMenu = (activeMenu+1)%sizeof(menuOptions);
+      changeDigit = MINUTE_TENS;
+      changeInterval = MENUSTART;
+    }
+
+    void incrementIntervalRounds(){
+      switch(changeDigit){
+      case MINUTE_TENS: //minute tens
+        menuOptions[activeMenu].changeTimeInterval(changeInterval, 10*10*60);
+        break;
+      case MINUTES:
+        menuOptions[activeMenu].changeTimeInterval(changeInterval, 10*60);
+        break;
+      case SECOND_TENS:
+        menuOptions[activeMenu].changeTimeInterval(changeInterval, 60);
+        break;
+      case SECONDS:
+        menuOptions[activeMenu].changeTimeInterval(changeInterval, 1);
+        break;
+      case ROUNDS_TENS:
+        menuOptions[activeMenu].changeRounds(10);
+        break;
+      case ROUNDS:
+        menuOptions[activeMenu].changeRounds(1);
+        break;             
+      }
+    }
+
+    void decrementIntervalRounds(){
+      switch(changeDigit){
+      case MINUTE_TENS: //minute tens
+        menuOptions[activeMenu].changeTimeInterval(changeInterval, -10*10*60);
+        break;
+      case MINUTES:
+        menuOptions[activeMenu].changeTimeInterval(changeInterval, -10*60);
+        break;
+      case SECOND_TENS:
+        menuOptions[activeMenu].changeTimeInterval(changeInterval, -60);
+        break;
+      case SECONDS:
+        menuOptions[activeMenu].changeTimeInterval(changeInterval, -1);
+        break;
+      case ROUNDS_TENS:
+        menuOptions[activeMenu].changeRounds(-10);
+        break;
+      case ROUNDS:
+        menuOptions[activeMenu].changeRounds(-1);
+        break;       
+      }
+    }
   
   public:
+
+    TimerMenu(DisplayControl &displayLedToAttach):
+      displayLed(displayLedToAttach)
+    {
+    }
+    
     void setup() {
       activeMenu = 0;
       changeDigit = MINUTE_TENS; 
       changeInterval = INTERVAL1;
+      
     }
   
     void loop() {
@@ -412,11 +399,11 @@ class TimerMenu {
         // Display Menu
         displayMenu();
       }
+      displayLed.displayCharArray(displayText);
     }
 
     // To be called by Power/Start Button short press
     void startTheTimer(){
-
       switch (changeInterval) {
       case MENUSTART:
         activeTimer.setup(menuOptions[activeMenu]);
@@ -437,20 +424,10 @@ class TimerMenu {
         }
         break;
       }
-      
     }
-
-    // To be called by Menu Button short press
-    void changeTimerMode() {
-      //cycle between MenuOptions
-      activeMenu = (activeMenu+1)%sizeof(menuOptions);
-      changeDigit = MINUTE_TENS;
-      changeInterval = INTERVAL1;
-    }
-
+    
     // Switch between intervals or rounds
     void changeChangeMode() {
-      
       // If at end of setting, switch to next Interval or Rounds, if applicable
       if (changeDigit == SECONDS || changeDigit == ROUNDS) {
         switch (changeInterval){
@@ -511,30 +488,19 @@ class TimerMenu {
       case NR_OF_ROUNDS:
         break;
       }
-      
     }
 
     // To be called by button +
     void incrementOption() {
-      switch(changeDigit){
-      case MINUTE_TENS: //minute tens
-        menuOptions[activeMenu].changeTimeInterval(changeInterval, 10*10*60);
+      switch (changeInterval) {
+      case MENUSTART:
+        changeTimerMode();
         break;
-      case MINUTES:
-        menuOptions[activeMenu].changeTimeInterval(changeInterval, 10*60);
+      case INTERVAL1:
+      case INTERVAL2:
+      case NR_OF_ROUNDS:
+        incrementIntervalRounds();
         break;
-      case SECOND_TENS:
-        menuOptions[activeMenu].changeTimeInterval(changeInterval, 60);
-        break;
-      case SECONDS:
-        menuOptions[activeMenu].changeTimeInterval(changeInterval, 1);
-        break;
-      case ROUNDS_TENS:
-        menuOptions[activeMenu].changeRounds(10);
-        break;
-      case ROUNDS:
-        menuOptions[activeMenu].changeRounds(1);
-        break;             
       }
     }
 
@@ -542,52 +508,163 @@ class TimerMenu {
     void decrementOption() {
       switch (changeInterval) {
       case MENUSTART:
-        changeInterval = INTERVAL1;
-        changeDigit = MINUTE_TENS;
+        changeTimerMode();
         break;
       case INTERVAL1:
       case INTERVAL2:
       case NR_OF_ROUNDS:
+        decrementIntervalRounds();
         break;
-      }
-      
-      switch(changeDigit){
-      case MINUTE_TENS: //minute tens
-        menuOptions[activeMenu].changeTimeInterval(changeInterval, -10*10*60);
-        break;
-      case MINUTES:
-        menuOptions[activeMenu].changeTimeInterval(changeInterval, -10*60);
-        break;
-      case SECOND_TENS:
-        menuOptions[activeMenu].changeTimeInterval(changeInterval, -60);
-        break;
-      case SECONDS:
-        menuOptions[activeMenu].changeTimeInterval(changeInterval, -1);
-        break;
-      case ROUNDS_TENS:
-        menuOptions[activeMenu].changeRounds(-10);
-        break;
-      case ROUNDS:
-        menuOptions[activeMenu].changeRounds(-1);
-        break;       
       }
     }
 
 };
 
+class Button {
+  const byte pin;
+  int state;
+  unsigned long buttonDownMs;
+
+  protected:
+    virtual void shortClick() = 0;
+    virtual void longClick() = 0;
+
+  public:
+    Button(byte attachTo) :
+      pin(attachTo)
+    {
+    }
+
+		void setup() {
+      pinMode(pin, INPUT_PULLUP);
+      state = HIGH;
+    }
+
+		void loop() {
+			int prevState = state;
+			state = digitalRead(pin);
+			if (prevState == HIGH && state == LOW) {
+				buttonDownMs = millis();
+			}
+			else if (prevState == LOW && state == HIGH) {
+				if (millis() - buttonDownMs < 50) {
+				// ignore this for debounce
+				}
+				else if (millis() - buttonDownMs < 250) {
+					shortClick();
+				}
+				else  {
+					longClick();
+				}
+			}
+		}
+
+};
+
+class PowerStartControlButton: public Button {
+  TimerMenu &menu;
+	public:
+		PowerStartControlButton(byte attachTo, TimerMenu &menuAttach) :
+			Button(attachTo),
+      menu(menuAttach)
+		{
+		}
+
+	protected:
+		void shortClick() {
+    // Start Timer
+    menu.startTheTimer();
+		}
+
+		void longClick() {
+      // Wake from/Go To sleep
+		}
+};
+
+class MenuControlButton: public Button {
+  TimerMenu &menu;
+  public:
+    MenuControlButton(byte attachTo, TimerMenu &menuAttach) :
+     Button(attachTo),
+     menu(menuAttach)
+    {
+    }
+
+  protected:
+    void shortClick() {
+      //Next changeInterval
+      menu.changeChangeMode();
+    }
+
+    void longClick() {
+      //Do Nothing
+    }
+};
+
+class MinusButton: public Button {
+  TimerMenu &menu;
+  public:
+    MinusButton(byte attachTo, TimerMenu &menuAttach) :
+     Button(attachTo),
+     menu(menuAttach)
+    {
+    }
+
+  protected:
+    void shortClick() {
+      menu.decrementOption();
+    }
+
+    void longClick() {
+      // Do Nothing
+    }
+};
+
+class PlusButton: public Button {
+  TimerMenu &menu;
+  public:
+    PlusButton(byte attachTo, TimerMenu &menuAttach) :
+      Button(attachTo),
+      menu(menuAttach)
+    {
+    }
+
+  protected:
+    void shortClick() {
+      menu.incrementOption();
+    }
+
+    void longClick() {
+      // Do nothing
+    }
+};
+
+DisplayControl ledDisplay(13, 14, 15, 1);
+TimerMenu cfTimer(ledDisplay);
+PowerStartControlButton pwrBtn(4, cfTimer);
+MenuControlButton menuBtn(12, cfTimer);
+MinusButton minBtn(5, cfTimer);
+PlusButton plusBtn(0, cfTimer);
+
 void setup() {
   // put your setup code here, to run once:
-  TimerMenu menu();
-  
-
+  pwrBtn.setup();
+  menuBtn.setup();
+  minBtn.setup();
+  plusBtn.setup();
+  cfTimer.setup();
+  ledDisplay.setup();
 }
 
 void loop() {
-  // put your main code here, to run repeatedly:
+  pwrBtn.loop();
+  menuBtn.loop();
+  minBtn.loop();
+  plusBtn.loop();
+  cfTimer.loop();
+  ledDisplay.loop();
 
 }
-
-
 
 /* Display:
  *  6 digits:
