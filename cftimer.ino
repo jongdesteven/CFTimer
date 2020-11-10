@@ -321,6 +321,8 @@ class TimerMenu {
         sprintf(displayText,"rd  %02d", menuOptions[activeMenu].getNrOfRounds());
         break;
       }
+      displayLed.displayCharArray(displayText);
+      displayLed.turnColonOn(false);
     }
 
     // To be called by Menu Button short press
@@ -392,14 +394,12 @@ class TimerMenu {
     }
   
     void loop() {
-      if (activeTimer.roundsLeft() != 0){
-        activeTimer.loop();//Display Timer
+      if (activeTimer.roundsLeft() > 0){
+        activeTimer.loop();
       }
       else {
-        // Display Menu
         displayMenu();
       }
-      displayLed.displayCharArray(displayText);
     }
 
     // To be called by Power/Start Button short press
